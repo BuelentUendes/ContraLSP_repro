@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--bs', default=100, type=int)
     args = parser.parse_args()
 
-    explainers = ["gatemask","extrmask", "dynamask"]
+    explainers = ["gatemask","extrmask"]
 
     X = torch.randint(low=0, high=5, size=(args.bs, args.ts, args.feature_num)).float()
 
@@ -55,8 +55,8 @@ if __name__ == "__main__":
     true_saliency[25:50, 4*2:, 1:2] = 1
     true_saliency[50:, 0*2:2*2, 0:1], true_saliency[50:, 0*2:2*2, 2:] = 1, 1
     print("-===============", true_saliency.sum())
-    for i in range(args.bs):
-        plot_example_box(true_saliency, i, "./plot/demo2plot/true_{}.png".format(i))
+    # for i in range(args.bs):
+    #     plot_example_box(true_saliency, i, "./plot/demo2plot/true_{}.png".format(i))
 
     if "gatemask" in explainers:
         trainer = Trainer(
@@ -96,8 +96,8 @@ if __name__ == "__main__":
         # plot_example_box(gatemask_saliency, 49)
         # plot_example_box(gatemask_saliency, 99)
 
-        for i in range(args.bs):
-            plot_example_box(gatemask_saliency, i, "./plot/demo2plot/gatemask_{}.png".format(i))
+        # for i in range(args.bs):
+        #     plot_example_box(gatemask_saliency, i, "./plot/demo2plot/gatemask_{}.png".format(i))
 
     if "extrmask" in explainers:
         trainer = Trainer(
@@ -134,8 +134,8 @@ if __name__ == "__main__":
         # plot_example_box(nnmask_saliency, 49)
         # plot_example_box(nnmask_saliency, 99)
 
-        for i in range(args.bs):
-            plot_example_box(nnmask_saliency, i, "./plot/demo2plot/extrmask_{}.png".format(i))
+        # for i in range(args.bs):
+        #     plot_example_box(nnmask_saliency, i, "./plot/demo2plot/extrmask_{}.png".format(i))
 
     if "dynamask" in explainers:
         from attribution.mask_group import MaskGroup
@@ -161,5 +161,5 @@ if __name__ == "__main__":
         # plot_example_box(dynamask_saliency, 49)
         # plot_example_box(dynamask_saliency, 99)
         #
-        for i in range(args.bs):
-            plot_example_box(dynamask_saliency, i, "./plot/demo2plot/dynamask_{}.png".format(i))
+        # for i in range(args.bs):
+        #     plot_example_box(dynamask_saliency, i, "./plot/demo2plot/dynamask_{}.png".format(i))
