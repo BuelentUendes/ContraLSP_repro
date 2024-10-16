@@ -12,6 +12,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+DEVICE = th.device(f"cuda:0" if th.cuda.is_available() else 'cpu')
+
 class MovingAvg(nn.Module):
     """
     Moving average block to highlight the trend of time series
@@ -60,7 +62,7 @@ class GateMaskNN(nn.Module):
     ) -> None:
         super().__init__()
         object.__setattr__(self, "forward_func", forward_func)
-        self.model = model
+        self.model = model.to(DEVICE)
         self.batch_size = batch_size
 
         self.input_size = None
@@ -89,11 +91,11 @@ class GateMaskNN(nn.Module):
 
         self.moving_avg = MovingAvg(self.win_size)
 
-        self.mask = nn.Parameter(th.Tensor(*input_size))
+        self.mask = nn.Parameter(th.Tensor(*input_size)).to(DEVICE)
 
         self.trendnet = nn.ModuleList()
         for i in range(self.channels):
-            self.trendnet.append(MLP([self.T, 32, self.T], activations='relu'))
+            self.trendnet.append(MLP([self.T, 32, self.T], activations='relu').to(DEVICE))
 
         self.reset_parameters()
 
@@ -114,10 +116,11 @@ class GateMaskNN(nn.Module):
         *additional_forward_args,
     ) -> (th.Tensor, th.Tensor):
 
+        x = x.clone().to(DEVICE)
         mu = self.mask[
             self.batch_size * batch_idx : self.batch_size * (batch_idx + 1)
         ]
-        noise = th.randn(x.shape)
+        noise = th.randn(x.shape, device=DEVICE)
         mask = mu + self.sigma * noise.normal_() * self.training
         mask = self.refactor_mask(mask, x)
 
@@ -156,7 +159,7 @@ class GateMaskNN(nn.Module):
         if self.use_win:
             trend = self.moving_avg(x)
         else:
-            trend = x
+            trend = x.to(DEVICE)
         trend_out = th.zeros(trend.shape,
                              dtype=trend.dtype).to(trend.device)
         for i in range(self.channels):
