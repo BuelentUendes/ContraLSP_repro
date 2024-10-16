@@ -397,7 +397,7 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="gpu:1",
+        default="cuda",
         help="Which device to use.",
     )
     parser.add_argument(
