@@ -85,10 +85,10 @@ def main(
         accelerator=accelerator,
         devices=device_id,
         deterministic=deterministic,
-        logger=TensorBoardLogger(
-            save_dir=".",
-            version=random.getrandbits(128),
-        ),
+        # logger=TensorBoardLogger(
+        #     save_dir=".",
+        #     version=random.getrandbits(128),
+        # ),
     )
     if is_train:
         trainer.fit(classifier, datamodule=hmm)
@@ -142,10 +142,10 @@ def main(
             devices=device_id,
             log_every_n_steps=2,
             deterministic=deterministic,
-            logger=TensorBoardLogger(
-                save_dir=".",
-                version=random.getrandbits(128),
-            ),
+            # logger=TensorBoardLogger(
+            #     save_dir=".",
+            #     version=random.getrandbits(128),
+            # ),
         )
         mask = MaskNet(
             forward_func=classifier,
@@ -175,10 +175,10 @@ def main(
             devices=device_id,
             log_every_n_steps=2,
             deterministic=deterministic,
-            logger=TensorBoardLogger(
-                save_dir=".",
-                version=random.getrandbits(128),
-            ),
+            # logger=TensorBoardLogger(
+            #     save_dir=".",
+            #     version=random.getrandbits(128),
+            # ),
         )
         mask = ExtremalMaskNet(
             forward_func=classifier,
@@ -213,10 +213,10 @@ def main(
             devices=device_id,
             log_every_n_steps=2,
             deterministic=deterministic,
-            logger=TensorBoardLogger(
-                save_dir=".",
-                version=random.getrandbits(128),
-            ),
+            # logger=TensorBoardLogger(
+            #     save_dir=".",
+            #     version=random.getrandbits(128),
+            # ),
         )
         mask = GateMaskNet(
             forward_func=classifier,
@@ -254,10 +254,10 @@ def main(
             devices=device_id,
             log_every_n_steps=10,
             deterministic=deterministic,
-            logger=TensorBoardLogger(
-                save_dir=".",
-                version=random.getrandbits(128),
-            ),
+            # logger=TensorBoardLogger(
+            #     save_dir=".",
+            #     version=random.getrandbits(128),
+            # ),
         )
         explainer = Fit(
             classifier,
@@ -340,10 +340,10 @@ def main(
                 accelerator=accelerator,
                 devices=device_id,
                 deterministic=deterministic,
-                logger=TensorBoardLogger(
-                    save_dir=".",
-                    version=random.getrandbits(128),
-                ),
+                # logger=TensorBoardLogger(
+                #     save_dir=".",
+                #     version=random.getrandbits(128),
+                # ),
             ),
         )
         attr["retain"] = (
