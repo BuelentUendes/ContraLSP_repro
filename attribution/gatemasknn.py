@@ -13,19 +13,16 @@ from tint.models import Net, MLP
 import warnings
 warnings.filterwarnings("ignore")
 
+# Set the device
+DEVICE = th.device("cuda:0" if th.cuda.is_available() else "cpu")
 
-# DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else 'cpu')
 class MovingAvg(nn.Module):
-    """
-    Moving average block to highlight the trend of time series
-    """
     def __init__(self, kernel_size=20, stride=1):
         super(MovingAvg, self).__init__()
         self.kernel_size = kernel_size
         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
 
     def forward(self, x):
-        # padding on the both ends of time series
         front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
         end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
         x = th.cat([front, x, end], dim=1)
@@ -33,24 +30,7 @@ class MovingAvg(nn.Module):
         x = x.permute(0, 2, 1)
         return x
 
-
 class GateMaskNN(nn.Module):
-    """
-    Extremal Mask NN model.
-
-    Args:
-        forward_func (callable): The forward function of the model or any
-            modification of it.
-        model (nnn.Module): A model used to recreate the original
-            predictions, in addition to the mask. Default to ``None``
-        batch_size (int): Batch size of the model. Default to 32
-        factor_dilation (float): Ratio between the final and the
-            initial size regulation factor. Default to 100
-    References
-        #. `Learning Perturbations to Explain Time Series Predictions <https://arxiv.org/abs/2305.18840>`_
-        #. `Understanding Deep Networks via Extremal Perturbations and Smooth Masks <https://arxiv.org/abs/1910.08485>`_
-    """
-
     def __init__(
         self,
         forward_func: Callable,
@@ -90,13 +70,13 @@ class GateMaskNN(nn.Module):
             np.log(self.factor_dilation) / n_epochs
         )
 
-        self.moving_avg = MovingAvg(self.win_size)
+        self.moving_avg = MovingAvg(self.win_size).to(DEVICE)
 
-        self.mask = nn.Parameter(th.Tensor(*input_size))
+        self.mask = nn.Parameter(th.Tensor(*input_size).to(DEVICE))
 
         self.trendnet = nn.ModuleList()
         for i in range(self.channels):
-            self.trendnet.append(MLP([self.T, 32, self.T], activations='relu'))
+            self.trendnet.append(MLP([self.T, 32, self.T], activations='relu').to(DEVICE))
 
         self.reset_parameters()
 
@@ -105,8 +85,6 @@ class GateMaskNN(nn.Module):
 
     def reset_parameters(self) -> None:
         self.mask.data.fill_(0.5)
-        # In the first training step, µd is 0.0
-        # self.mask.data.fill_(0.0)
 
     def forward(
         self,
@@ -116,30 +94,22 @@ class GateMaskNN(nn.Module):
         target,
         *additional_forward_args,
     ) -> (th.Tensor, th.Tensor):
-
         mu = self.mask[
             self.batch_size * batch_idx : self.batch_size * (batch_idx + 1)
         ]
-        noise = th.randn(x.shape)
+        noise = th.randn(x.shape, device=DEVICE)
         mask = mu + self.sigma * noise.normal_() * self.training
         mask = self.refactor_mask(mask, x)
 
-        # hard sigmoid
         mask = self.hard_sigmoid(mask)
 
-        # If model is provided, we use it as the baselines
         if self.model is not None:
             baselines = self.model(x - baselines)
 
-        # Mask data according to samples
-        # We eventually cut samples up to x time dimension
-        # x1 represents inputs with important features masked.
-        # x2 represents inputs with unimportant features masked.
         mask = mask[:, : x.shape[1], ...]
         x1 = x * mask + baselines * (1.0 - mask)
         x2 = x * (1.0 - mask) + baselines * mask
 
-        # Return f(perturbed x)
         return (
             _run_forward(
                 forward_func=self.forward_func,
@@ -161,33 +131,29 @@ class GateMaskNN(nn.Module):
         else:
             trend = x
         trend_out = th.zeros(trend.shape,
-                             dtype=trend.dtype).to(trend.device)
+                             dtype=trend.dtype, device=DEVICE)
         for i in range(self.channels):
             trend_out[:, :, i] = self.trendnet[i](trend[:, :, i])
 
-        # front = x[:, 0:1, :]
-        # x_f = th.cat([front, x], dim=1)[:, :-1, :]
-        # res = th.abs(x - x_f)
         return trend_out
 
     def refactor_mask(self, mask, x):
-
         trend = self.trend_info(x)
         mask = mask + self.based
 
-        if self.pooling_method == 'sigmoid': #https://paperswithcode.com/method/silu
+        if self.pooling_method == 'sigmoid':
             mask = mask * th.sigmoid(
                 mask * trend
             )
-        elif self.pooling_method == 'softmax':  #https://arxiv.org/pdf/1910.08485.pdf, no work.
+        elif self.pooling_method == 'softmax':
             mask = mask * th.softmax(
                 mask * trend, dim=1
             )
-        elif self.pooling_method == 'cdf':  #https://paperswithcode.com/method/gelu
+        elif self.pooling_method == 'cdf':
             mask = 0.5 * (
                     mask + mask * th.erf(mask * trend)
             )
-        elif self.pooling_method == 'none':  # no smoothness
+        elif self.pooling_method == 'none':
             mask = mask
         else:
             assert False, f"Unknown pooling method {self.pooling_method}"
@@ -198,32 +164,7 @@ class GateMaskNN(nn.Module):
         mask = self.hard_sigmoid(mask)
         return mask.detach().cpu()
 
-
 class GateMaskNet(Net):
-    """
-    Gate mask model as a Pytorch Lightning model.
-
-    Args:
-        forward_func (callable): The forward function of the model or any
-            modification of it.
-        preservation_mode (bool): If ``True``, uses the method in
-            preservation mode. Otherwise, uses the deletion mode.
-            Default to ``True``
-        model (nnn.Module): A model used to recreate the original
-            predictions, in addition to the mask. Default to ``None``
-        batch_size (int): Batch size of the model. Default to 32
-        lambda_1 (float): Weighting for the mask loss. Default to 1.
-        lambda_2 (float): Weighting for the model output loss. Default to 1.
-        loss (str, callable): Which loss to use. Default to ``'mse'``
-        optim (str): Which optimizer to use. Default to ``'adam'``
-        lr (float): Learning rate. Default to 1e-3
-        lr_scheduler (dict, str): Learning rate scheduler. Either a dict
-            (custom scheduler) or a string. Default to ``None``
-        lr_scheduler_args (dict): Additional args for the scheduler.
-            Default to ``None``
-        l2 (float): L2 regularisation. Default to 0.0
-    """
-
     def __init__(
         self,
         forward_func: Callable,
@@ -268,60 +209,47 @@ class GateMaskNet(Net):
         return self.net(*args, **kwargs)
 
     def step(self, batch, batch_idx, stage):
-        # x is the data to be perturbed
-        # y is the same data without perturbation
         x, y, baselines, target, *additional_forward_args = batch
 
-        # If additional_forward_args is only one None,
-        # set it to None
         if additional_forward_args == [None]:
             additional_forward_args = None
 
-        # Get perturbed output
-        # y_hat1 is computed by masking important features
-        # y_hat2 is computed by masking unimportant features
         if additional_forward_args is None:
-            y_hat1, y_hat2 = self(x.float(), batch_idx, baselines, target)
+            y_hat1, y_hat2 = self(x.float().to(DEVICE), batch_idx, baselines.to(DEVICE), target)
         else:
             y_hat1, y_hat2 = self(
-                x.float(),
+                x.float().to(DEVICE),
                 batch_idx,
-                baselines,
+                baselines.to(DEVICE),
                 target,
-                *additional_forward_args,
+                *[arg.to(DEVICE) if isinstance(arg, th.Tensor) else arg for arg in additional_forward_args],
             )
 
-        # Get unperturbed output for inputs and baselines
         y_target1 = _run_forward(
             forward_func=self.net.forward_func,
-            inputs=y,
+            inputs=y.to(DEVICE),
             target=target,
             additional_forward_args=tuple(additional_forward_args)
             if additional_forward_args is not None
             else None,
         )
 
-        # Add L1 loss
         mask_ = self.net.mask[
                 self.net.batch_size
                 * batch_idx: self.net.batch_size * (batch_idx + 1)
                 ]
-        reg = 0.5 + 0.5 * th.erf(self.net.refactor_mask(mask_, x) / (self.net.sigma * np.sqrt(2)))
-        # reg = self.net.refactor_mask(mask_, x).abs()
+        reg = 0.5 + 0.5 * th.erf(self.net.refactor_mask(mask_, x.to(DEVICE)) / (self.net.sigma * np.sqrt(2)))
 
-        # trend_reg = self.net.trend_info(x).abs().mean()
         mask_loss = self.lambda_1 * reg.mean()
-        # mask_loss = self.lambda_1 * th.sum(reg, dim=[1,2]).mean()
 
         triplet_loss = 0
         if self.net.model is not None:
-            condition = self.net.model(x - baselines)
+            condition = self.net.model(x.to(DEVICE) - baselines.to(DEVICE))
             if self.net.batch_size > 1:
                 triplet_loss = self.lambda_2 * self._triplet_loss(condition)
             else:
                 triplet_loss = self.lambda_2 * condition.abs().mean()
 
-        # Add preservation and deletion losses if required
         if self.preservation_mode:
             main_loss = self.loss(y_hat1, y_target1)
         else:
@@ -329,8 +257,7 @@ class GateMaskNet(Net):
 
         loss = main_loss + mask_loss + triplet_loss
 
-        # test log
-        _test_mask = self.net.representation(x)
+        _test_mask = self.net.representation(x.to(DEVICE))
         test = (_test_mask[_test_mask > 0]).sum()
         lambda_1_t = self.lambda_1
         lambda_2_t = self.lambda_2
@@ -341,51 +268,42 @@ class GateMaskNet(Net):
 
     def _triplet_loss(self, condition):
         _, ts_dim, num_dim = condition.shape
-        points = condition.reshape(-1, ts_dim * num_dim).detach().numpy()
+        points = condition.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
         num_cluster = 2
         kmeans = KMeans(n_clusters=num_cluster)
         kmeans.fit(points)
         cluster_label = kmeans.labels_
         num_cluster_set = Counter(cluster_label)
 
-        # loss of each cluster
-        loss_cluster = condition.abs().mean()   # placeholder
+        loss_cluster = condition.abs().mean()
         for i in range(num_cluster):
             if num_cluster_set[i] < 2:
                 continue
             cluster_i = points[np.where(cluster_label == i)]
             distance_i = kmeans.transform(cluster_i)[:, i]
-            dist_positive = th.DoubleTensor([1])
-            dist_negative = th.DoubleTensor([1])
+            dist_positive = th.DoubleTensor([1]).to(DEVICE)
+            dist_negative = th.DoubleTensor([1]).to(DEVICE)
             if num_cluster_set[i] >= 250:
                 num_positive = 50
             else:
                 num_positive = int(num_cluster_set[i] / 5 + 1)
 
-            # select anchor and positive
             anchor_positive = np.argpartition(distance_i, num_positive)[:(num_positive + 1)]
-            # torch anchor
-            representation_anc = th.from_numpy(points[anchor_positive[0]])
-            # transfer 1D to 3D
+            representation_anc = th.from_numpy(points[anchor_positive[0]]).to(DEVICE)
             representation_anc = th.reshape(representation_anc, (1, 1, np.shape(points)[1]))
 
-            # positive part
             for l in range(1, num_positive + 1):
-                # torch positive
-                representation_pos = th.from_numpy(points[anchor_positive[l]])
-                # transfer 1D to 3D
+                representation_pos = th.from_numpy(points[anchor_positive[l]]).to(DEVICE)
                 representation_pos = th.reshape(representation_pos, (1, 1, np.shape(points)[1]))
                 anchor_minus_positive = representation_anc - representation_pos
                 dist_positive += th.norm(anchor_minus_positive, p=1)/np.shape(points)[1]
             dist_positive = dist_positive / num_positive
 
-            # negative part
             for k in range(num_cluster):
-                dist_cluster_k_negative = th.DoubleTensor([1])
+                dist_cluster_k_negative = th.DoubleTensor([1]).to(DEVICE)
                 if k == i:
                     continue
                 else:
-                    # select negative
                     if num_cluster_set[k] >= 250:
                         num_negative_cluster_k = 50
                     else:
@@ -394,9 +312,7 @@ class GateMaskNet(Net):
                     negative_cluster_k = random.sample(range(points[kmeans.labels_ == k][:, 0].size),
                                                        num_negative_cluster_k)
                     for j in range(num_negative_cluster_k):
-                        # torch negative
-                        representation_neg = th.from_numpy(points[kmeans.labels_ == k][negative_cluster_k[j]])
-                        # transfer 1D to 3D
+                        representation_neg = th.from_numpy(points[kmeans.labels_ == k][negative_cluster_k[j]]).to(DEVICE)
                         representation_neg = th.reshape(representation_neg, (1, 1, np.shape(points)[1]))
                         anchor_minus_negative = representation_anc - representation_neg
                         dist_cluster_k_negative += th.norm(anchor_minus_negative, p=1)/np.shape(points)[1]
@@ -404,18 +320,15 @@ class GateMaskNet(Net):
                 dist_cluster_k_negative = dist_cluster_k_negative / num_negative_cluster_k
                 dist_negative += dist_cluster_k_negative
             dist_negative = dist_negative / (num_cluster - 1)
-            #  loss =  -(margin + positives - negatives)
             if self.preservation_mode:
-                loss_values = th.max((-dist_positive + dist_negative - 1)[0], th.tensor(0.)) / num_cluster
+                loss_values = th.max((-dist_positive + dist_negative - 1)[0], th.tensor(0.).to(DEVICE)) / num_cluster
             else:
-                loss_values = th.max(-(-dist_positive + dist_negative - 1)[0], th.tensor(0.)) / num_cluster
+                loss_values = th.max(-(-dist_positive + dist_negative - 1)[0], th.tensor(0.).to(DEVICE)) / num_cluster
             loss_cluster += loss_values
 
         return loss_cluster
 
     def on_train_epoch_end(self) -> None:
-        # Increase the regulator coefficient
-        # self.lambda_1 *= self.net.reg_multiplier
         pass
 
     def configure_optimizers(self):
@@ -424,7 +337,6 @@ class GateMaskNet(Net):
             params += [{"params": self.net.model.parameters()}]
         if self.net.trendnet is not None:
             params += [{"params": self.net.trendnet.parameters()}]
-        # params = self.net.parameters()
         if self._optim == "adam":
             optim = th.optim.Adam(
                 params=params,
@@ -451,7 +363,6 @@ class GateMaskNet(Net):
             return {"optimizer": optim, "lr_scheduler": lr_scheduler}
 
         return {"optimizer": optim}
-
 
 
 
