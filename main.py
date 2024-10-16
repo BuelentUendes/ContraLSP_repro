@@ -379,16 +379,16 @@ def parse_args():
         type=str,
         default=[
             "gate_mask",
-            "deep_lift",
-            "dyna_mask",
-            "extremal_mask",
-            "fit",
-            "gradient_shap",
-            "integrated_gradients",
-            "lime",
-            "augmented_occlusion",
-            "occlusion",
-            "retain",
+            # "deep_lift",
+            # "dyna_mask",
+            # "extremal_mask",
+            # "fit",
+            # "gradient_shap",
+            # "integrated_gradients",
+            # "lime",
+            # "augmented_occlusion",
+            # "occlusion",
+            # "retain",
         ],
         nargs="+",
         metavar="N",
@@ -397,7 +397,7 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cpu",
+        default="gpu",
         help="Which device to use.",
     )
     parser.add_argument(
@@ -415,7 +415,7 @@ def parse_args():
     parser.add_argument(
         "--train",
         type=bool,
-        default=False,
+        default=True,
         help="Train thr rnn classifier.",
     )
     parser.add_argument(
