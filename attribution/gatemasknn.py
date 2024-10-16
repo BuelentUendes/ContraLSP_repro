@@ -211,6 +211,7 @@ class GateMaskNet(Net):
     def step(self, batch, batch_idx, stage):
         x, y, baselines, target, *additional_forward_args = batch
 
+        baselines = th.tensor(baselines, device=DEVICE, dtype=th.float32)
         if additional_forward_args == [None]:
             additional_forward_args = None
 
