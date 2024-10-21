@@ -304,7 +304,10 @@ class GateMaskNet(Net):
             sakoe_chiba_radius = int(0.05 * condition.shape[1]) if self.speed_up else 1
 
             kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw",
-                                      metric_params={"sakoe_chiba_radius": sakoe_chiba_radius})
+                                      metric_params={
+                                          "global_constraint": "sakoe_chiba",
+                                          "sakoe_chiba_radius": sakoe_chiba_radius
+                                      })
 
             points = condition.detach().cpu().numpy()
 
