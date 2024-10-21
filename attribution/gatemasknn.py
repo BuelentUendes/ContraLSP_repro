@@ -10,6 +10,9 @@ from typing import Callable, Union
 from collections import Counter
 
 from tint.models import Net, MLP
+from tslearn.clustering import TimeSeriesKMeans
+from tslearn.metrics import soft_dtw, dtw
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -173,6 +176,7 @@ class GateMaskNet(Net):
         batch_size: int = 32,
         lambda_1: float = 1.0,
         lambda_2: float = 1.0,
+        time_series_clustering: bool = False,
         factor_dilation=10.0,
         based=0.5,
         loss: Union[str, Callable] = "mse",
@@ -203,6 +207,7 @@ class GateMaskNet(Net):
         self.preservation_mode = preservation_mode
         self.lambda_1 = lambda_1
         self.lambda_2 = lambda_2
+        self.time_series_clustering = time_series_clustering
         self.based = based
 
     def forward(self, *args, **kwargs) -> th.Tensor:
@@ -268,10 +273,16 @@ class GateMaskNet(Net):
         return loss
 
     def _triplet_loss(self, condition):
-        _, ts_dim, num_dim = condition.shape
-        points = condition.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
         num_cluster = 2
-        kmeans = KMeans(n_clusters=num_cluster)
+
+        if self.time_series_clustering:
+            kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw")
+            points = condition.detach().cpu().numpy()
+        else:
+            _, ts_dim, num_dim = condition.shape
+            points = condition.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
+            kmeans = KMeans(n_clusters=num_cluster)
+
         kmeans.fit(points)
         cluster_label = kmeans.labels_
         num_cluster_set = Counter(cluster_label)
@@ -281,7 +292,6 @@ class GateMaskNet(Net):
             if num_cluster_set[i] < 2:
                 continue
             cluster_i = points[np.where(cluster_label == i)]
-            distance_i = kmeans.transform(cluster_i)[:, i]
             dist_positive = th.DoubleTensor([1]).to(DEVICE)
             dist_negative = th.DoubleTensor([1]).to(DEVICE)
             if num_cluster_set[i] >= 250:
@@ -289,15 +299,33 @@ class GateMaskNet(Net):
             else:
                 num_positive = int(num_cluster_set[i] / 5 + 1)
 
+            distance_i = kmeans.transform(cluster_i)[:, i]
             anchor_positive = np.argpartition(distance_i, num_positive)[:(num_positive + 1)]
             representation_anc = th.from_numpy(points[anchor_positive[0]]).to(DEVICE)
-            representation_anc = th.reshape(representation_anc, (1, 1, np.shape(points)[1]))
+
+            if not self.time_series_clustering:
+                # Reshape only if use euclidean distance
+                representation_anc = th.reshape(representation_anc, (1, 1, np.shape(points)[1]))
 
             for l in range(1, num_positive + 1):
                 representation_pos = th.from_numpy(points[anchor_positive[l]]).to(DEVICE)
-                representation_pos = th.reshape(representation_pos, (1, 1, np.shape(points)[1]))
-                anchor_minus_positive = representation_anc - representation_pos
-                dist_positive += th.norm(anchor_minus_positive, p=1)/np.shape(points)[1]
+                if self.time_series_clustering:
+                    # We use the soft dtw distance for differentiability
+                    # However, we need to use a additional form as the standard soft-dtw is not a proper divergence measure
+                    # Paper: https://arxiv.org/pdf/2010.08354
+                    # Formula: https://rtavenar.github.io/ml4ts_ensai/contents/align/softdtw.html#id1
+                    soft_dtw_distance_x_y = soft_dtw(representation_anc, representation_pos)
+                    soft_dtw_distance_x_x = soft_dtw(representation_anc, representation_anc)
+                    soft_dtw_distance_y_y = soft_dtw(representation_pos, representation_pos)
+                    soft_dtw_distance = soft_dtw_distance_x_y - 0.5 * (soft_dtw_distance_x_x + soft_dtw_distance_y_y)
+
+                    dist_positive += soft_dtw_distance
+
+                else:
+                    representation_pos = th.reshape(representation_pos, (1, 1, np.shape(points)[1]))
+                    anchor_minus_positive = representation_anc - representation_pos
+                    dist_positive += th.norm(anchor_minus_positive, p=1)/np.shape(points)[1]
+
             dist_positive = dist_positive / num_positive
 
             for k in range(num_cluster):
@@ -310,17 +338,32 @@ class GateMaskNet(Net):
                     else:
                         num_negative_cluster_k = int(num_cluster_set[k] / 5 + 1)
 
-                    negative_cluster_k = random.sample(range(points[kmeans.labels_ == k][:, 0].size),
-                                                       num_negative_cluster_k)
+                    negative_points = points[kmeans.labels_ == k]
+                    negative_cluster_k = random.sample(range(negative_points.shape[0]), num_negative_cluster_k)
+
+                    # negative_cluster_k = random.sample(range(points[kmeans.labels_ == k][:, 0].size),
+                    #                                    num_negative_cluster_k)
+
                     for j in range(num_negative_cluster_k):
-                        representation_neg = th.from_numpy(points[kmeans.labels_ == k][negative_cluster_k[j]]).to(DEVICE)
-                        representation_neg = th.reshape(representation_neg, (1, 1, np.shape(points)[1]))
-                        anchor_minus_negative = representation_anc - representation_neg
-                        dist_cluster_k_negative += th.norm(anchor_minus_negative, p=1)/np.shape(points)[1]
+                        representation_neg = th.from_numpy(points[kmeans.labels_ == k][negative_cluster_k[j]]).to(
+                            DEVICE)
+                        if self.time_series_clustering:
+                            soft_dtw_distance_x_y = soft_dtw(representation_anc, representation_neg)
+                            soft_dtw_distance_x_x = soft_dtw(representation_anc, representation_anc)
+                            soft_dtw_distance_y_y = soft_dtw(representation_neg, representation_neg)
+                            soft_dtw_distance = soft_dtw_distance_x_y - 0.5 * (
+                                        soft_dtw_distance_x_x + soft_dtw_distance_y_y)
+
+                            dist_cluster_k_negative += soft_dtw_distance
+                        else:
+                            representation_neg = th.reshape(representation_neg, (1, 1, np.shape(points)[1]))
+                            anchor_minus_negative = representation_anc - representation_neg
+                            dist_cluster_k_negative += th.norm(anchor_minus_negative, p=1)/np.shape(points)[1]
 
                 dist_cluster_k_negative = dist_cluster_k_negative / num_negative_cluster_k
                 dist_negative += dist_cluster_k_negative
             dist_negative = dist_negative / (num_cluster - 1)
+
             if self.preservation_mode:
                 loss_values = th.max((-dist_positive + dist_negative - 1)[0], th.tensor(0.).to(DEVICE)) / num_cluster
             else:
