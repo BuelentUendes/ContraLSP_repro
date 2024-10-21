@@ -231,6 +231,7 @@ def main(
             ),
             lambda_1=lambda_1,
             lambda_2=lambda_2,
+            time_series_clustering=True,
             optim="adam",
             lr=0.01,
         )
