@@ -12,12 +12,33 @@ from collections import Counter
 from tint.models import Net, MLP
 from tslearn.clustering import TimeSeriesKMeans
 from tslearn.metrics import soft_dtw, dtw
+from fastdtw import fastdtw
+from scipy.spatial.distance import euclidean
+from sklearn_extra.cluster import KMedoids
 
 import warnings
 warnings.filterwarnings("ignore")
 
 # Set the device
 DEVICE = th.device("cuda:0" if th.cuda.is_available() else "cpu")
+
+
+def fastdtw_distance(ts1, ts2):
+    """Compute the FastDTW distance between two time series."""
+    distance, _ = fastdtw(ts1, ts2, dist=euclidean)
+    return distance
+
+
+def custom_distance_matrix(X):
+    """Compute a pairwise distance matrix using FastDTW."""
+    n = len(X)
+    dist_matrix = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):  # Only compute upper triangle
+            dist_matrix[i, j] = fastdtw_distance(X[i], X[j])
+            dist_matrix[j, i] = dist_matrix[i, j]  # Symmetric matrix
+    return dist_matrix
+
 
 class MovingAvg(nn.Module):
     def __init__(self, kernel_size=20, stride=1):
@@ -177,6 +198,7 @@ class GateMaskNet(Net):
         lambda_1: float = 1.0,
         lambda_2: float = 1.0,
         time_series_clustering: bool = False,
+        speed_up: bool = True,
         factor_dilation=10.0,
         based=0.5,
         loss: Union[str, Callable] = "mse",
@@ -208,6 +230,7 @@ class GateMaskNet(Net):
         self.lambda_1 = lambda_1
         self.lambda_2 = lambda_2
         self.time_series_clustering = time_series_clustering
+        self.speed_up = speed_up
         self.based = based
 
     def forward(self, *args, **kwargs) -> th.Tensor:
@@ -276,8 +299,22 @@ class GateMaskNet(Net):
         num_cluster = 2
 
         if self.time_series_clustering:
-            kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw")
+            # This is quite slow! Warping window to speed it up!
+            # Calculate 1% of the time series length for the Sakoe-Chiba radius
+            sakoe_chiba_radius = int(0.05 * condition.shape[1]) if self.speed_up else 1
+
+            kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw",
+                                      metric_params={"sakoe_chiba_radius": sakoe_chiba_radius})
+
             points = condition.detach().cpu().numpy()
+
+            # Z-standardize the time-series which is suggested for dtw
+            # see paper/slides https://www.cs.unm.edu/%7Emueen/DTW.pdf
+            mean_series = np.mean(points, axis=0)
+            std_series = np.std(points, axis=0)
+
+            points = (points - mean_series) / (std_series + 1e-7)
+
         else:
             _, ts_dim, num_dim = condition.shape
             points = condition.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
