@@ -113,6 +113,7 @@ class GateMaskNN(nn.Module):
         self.trendnet = nn.ModuleList()
         for i in range(self.channels):
             trend_model = MLP([self.T, 32, self.T], activations='relu').to(DEVICE)
+            trend_model.mlp.to(DEVICE)
             self.trendnet.append(trend_model)
 
         self.trendnet = self.trendnet.to(DEVICE)
