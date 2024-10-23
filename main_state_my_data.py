@@ -108,7 +108,7 @@ def main(
 
         # Train classifier
         trainer = Trainer(
-            max_epochs=5,
+            max_epochs=50,
             accelerator=accelerator,
             devices=device_id,
             deterministic=deterministic,
