@@ -173,7 +173,8 @@ class GateMaskNN(nn.Module):
         trend_out = th.zeros(trend.shape,
                              dtype=trend.dtype, device=DEVICE)
         for i in range(self.channels):
-            trend_out[:, :, i] = self.trendnet[i](trend[:, :, i].to(DEVICE)).to(DEVICE)
+            sliced_trend = trend[:, :, i].to(DEVICE)
+            trend_out[:, :, i] = self.trendnet[i](sliced_trend)
 
         return trend_out
 
