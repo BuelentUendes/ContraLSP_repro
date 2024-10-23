@@ -15,12 +15,24 @@ from tslearn.metrics import soft_dtw, dtw
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 from sklearn_extra.cluster import KMedoids
+from pyts.metrics import dtw
+import itertools
 
 import warnings
 warnings.filterwarnings("ignore")
 
 # Set the device
 DEVICE = th.device("cuda:0" if th.cuda.is_available() else "cpu")
+
+
+# Code taken from:
+# https://pyts.readthedocs.io/en/latest/auto_examples/clustering/plot_dtw_boss.html#sphx-glr-auto-examples-clustering-plot-dtw-boss-py
+def create_dist_matrix(dataset, dist_func, **kwargs):
+    distance_mat = np.zeros((len(dataset), len(dataset)))
+    for i, j in itertools.product(range(len(dataset)),
+                                  range(len(dataset))):
+        distance_mat[i, j] = dist_func(dataset[i], dataset[j], **kwargs)
+    return distance_mat
 
 
 def fastdtw_distance(ts1, ts2):
@@ -122,8 +134,9 @@ class GateMaskNN(nn.Module):
             self.batch_size * batch_idx : self.batch_size * (batch_idx + 1)
         ]
         noise = th.randn(x.shape, device=DEVICE)
+        print(f"is the network in training mode? {self.training}")
         mask = mu + self.sigma * noise.normal_() * self.training
-        mask = self.refactor_mask(mask, x)
+        mask = self.refactor_mask(mask, x.to(DEVICE))
 
         mask = self.hard_sigmoid(mask)
 
@@ -187,6 +200,7 @@ class GateMaskNN(nn.Module):
         mask = self.refactor_mask(self.mask, x)
         mask = self.hard_sigmoid(mask)
         return mask.detach().cpu()
+
 
 class GateMaskNet(Net):
     def __init__(
@@ -299,18 +313,7 @@ class GateMaskNet(Net):
         num_cluster = 2
 
         if self.time_series_clustering:
-            # This is quite slow! Warping window to speed it up!
-            # Calculate 1% of the time series length for the Sakoe-Chiba radius
-            sakoe_chiba_radius = int(0.05 * condition.shape[1]) if self.speed_up else 1
-
-            kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw",
-                                      metric_params={
-                                          "global_constraint": "sakoe_chiba",
-                                          "sakoe_chiba_radius": sakoe_chiba_radius
-                                      })
-
             points = condition.detach().cpu().numpy()
-
             # Z-standardize the time-series which is suggested for dtw
             # see paper/slides https://www.cs.unm.edu/%7Emueen/DTW.pdf
             mean_series = np.mean(points, axis=0)
@@ -318,13 +321,41 @@ class GateMaskNet(Net):
 
             points = (points - mean_series) / (std_series + 1e-7)
 
+            # If KMedeoids algorithm
+            # pyts expects it in 1d
+            # _, ts_dim, num_dim = points.shape
+            # points = points.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
+            # 
+            # dist_mat = create_dist_matrix(points, dtw)
+            # 
+            # # Now we use k-medeoids with precomputed distance metric
+            # kmeans = KMedoids(n_clusters=num_cluster, metric="precomputed")
+            # kmeans.fit(dist_mat)
+            # 
+            # cluster_label = kmeans.predict(dist_mat)
+
+            # This is quite slow! Warping window to speed it up!
+            # # Calculate 1% of the time series length for the Sakoe-Chiba radius
+            sakoe_chiba_radius = int(0.10 * condition.shape[1]) if self.speed_up else int(condition.shape[1])
+
+            kmeans = TimeSeriesKMeans(n_clusters=num_cluster, metric="dtw",
+                                      max_iter_barycenter=50,
+                                      metric_params={
+                                          "global_constraint": "sakoe_chiba",
+                                          "sakoe_chiba_radius": sakoe_chiba_radius
+                                      },
+                                      n_jobs=-1)
+            kmeans.fit(points)
+
+            cluster_label = kmeans.labels_
+
         else:
             _, ts_dim, num_dim = condition.shape
             points = condition.reshape(-1, ts_dim * num_dim).detach().cpu().numpy()
             kmeans = KMeans(n_clusters=num_cluster)
+            kmeans.fit(points)
+            cluster_label = kmeans.labels_
 
-        kmeans.fit(points)
-        cluster_label = kmeans.labels_
         num_cluster_set = Counter(cluster_label)
 
         loss_cluster = condition.abs().mean()
@@ -395,6 +426,7 @@ class GateMaskNet(Net):
                                         soft_dtw_distance_x_x + soft_dtw_distance_y_y)
 
                             dist_cluster_k_negative += soft_dtw_distance
+
                         else:
                             representation_neg = th.reshape(representation_neg, (1, 1, np.shape(points)[1]))
                             anchor_minus_negative = representation_anc - representation_neg
@@ -447,10 +479,6 @@ class GateMaskNet(Net):
             return {"optimizer": optim, "lr_scheduler": lr_scheduler}
 
         return {"optimizer": optim}
-
-
-
-
 
 
 # import torch as th
