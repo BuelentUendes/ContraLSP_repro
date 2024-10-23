@@ -14,8 +14,8 @@ from tslearn.clustering import TimeSeriesKMeans
 from tslearn.metrics import soft_dtw, dtw
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
-from sklearn_extra.cluster import KMedoids
-from pyts.metrics import dtw
+# from sklearn_extra.cluster import KMedoids
+# from pyts.metrics import dtw
 import itertools
 
 import warnings
