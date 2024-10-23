@@ -115,6 +115,7 @@ class GateMaskNN(nn.Module):
             trend_model = MLP([self.T, 32, self.T], activations='relu').to(DEVICE)
             self.trendnet.append(trend_model)
 
+        self.trendnet = self.trendnet.to(DEVICE)
         self.reset_parameters()
 
     def hard_sigmoid(self, x):
