@@ -237,7 +237,7 @@ def main(
 
         if "gate_mask" in explainers:
             trainer = Trainer(
-                max_epochs=500,
+                max_epochs=args.iterations,
                 accelerator=accelerator,
                 devices=device_id,
                 log_every_n_steps=2,
@@ -475,6 +475,7 @@ def parse_args():
     parser.add_argument("--dataset", type=str, default="state", choices=("state, switch"))
     parser.add_argument("--signal_length", type=int, default=200, help="Length of the time_series")
     parser.add_argument("--sample_size", type=int, default=1_000, help="Number of timeseries to generate")
+    parser.add_argument("--iterations", type=int, default=500)
 
     return parser.parse_args()
 
