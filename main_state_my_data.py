@@ -59,6 +59,7 @@ def main(
     lambda_2: float = 1.0,
     output_file: str = "results.csv",
 ):
+    seed_everything(seed)
     # If deterministic, seed everything
     if deterministic:
         seed_everything(seed=seed, workers=True)
@@ -105,12 +106,9 @@ def main(
             l2=1e-3,
         )
 
-        # classifier = train_model(classifier, dataloader_train, dataloader_test, lr=1e-4, epochs=10,
-        #                     device=DEVICE)
-
         # Train classifier
         trainer = Trainer(
-            max_epochs=50,
+            max_epochs=5,
             accelerator=accelerator,
             devices=device_id,
             deterministic=deterministic,
@@ -225,6 +223,19 @@ def main(
                 optim="adam",
                 lr=0.01,
             )
+
+            perturbation_model = nn.Sequential(
+                    RNN(
+                        input_size=x_test.shape[-1],
+                        rnn="gru",
+                        hidden_size=x_test.shape[-1],
+                        bidirectional=True,
+                    ),
+                    MLP([2 * x_test.shape[-1], x_test.shape[-1]]),
+                )
+
+            print(perturbation_model)
+
             explainer = ExtremalMask(classifier)
             _attr = explainer.attribute(
                 x_test,
