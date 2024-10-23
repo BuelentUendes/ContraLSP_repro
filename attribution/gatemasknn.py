@@ -170,12 +170,12 @@ class GateMaskNN(nn.Module):
         trend_out = th.zeros(trend.shape,
                              dtype=trend.dtype, device=DEVICE)
         for i in range(self.channels):
-            trend_out[:, :, i] = self.trendnet[i](trend[:, :, i])
+            trend_out[:, :, i] = self.trendnet[i](trend[:, :, i]).to(DEVICE)
 
         return trend_out
 
     def refactor_mask(self, mask, x):
-        trend = self.trend_info(x)
+        trend = self.trend_info(x).to(DEVICE)
         mask = mask.to(DEVICE) + self.based
 
         if self.pooling_method == 'sigmoid':
