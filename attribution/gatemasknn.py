@@ -113,6 +113,7 @@ class GateMaskNN(nn.Module):
         self.trendnet = nn.ModuleList()
         for i in range(self.channels):
             trend_model = MLP([self.T, 32, self.T], activations='relu').to(DEVICE)
+            print(trend_model)
             trend_model.mlp.to(DEVICE)
             self.trendnet.append(trend_model)
 
@@ -134,7 +135,7 @@ class GateMaskNN(nn.Module):
         *additional_forward_args,
     ) -> (th.Tensor, th.Tensor):
         mu = self.mask[
-            self.batch_size * batch_idx : self.batch_size * (batch_idx + 1)
+            self.batch_size * batch_idx: self.batch_size * (batch_idx + 1)
         ]
         noise = th.randn(x.shape, device=DEVICE)
         mask = mu + self.sigma * noise.normal_() * self.training
@@ -302,6 +303,7 @@ class GateMaskNet(Net):
         else:
             main_loss = -1. * self.loss(y_hat2, y_target1)
 
+        print(f"THE DISTORTION LOSS IS {main_loss}")
         loss = main_loss + mask_loss + triplet_loss
 
         _test_mask = self.net.representation(x.to(DEVICE))
