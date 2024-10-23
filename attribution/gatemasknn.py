@@ -112,7 +112,8 @@ class GateMaskNN(nn.Module):
 
         self.trendnet = nn.ModuleList()
         for i in range(self.channels):
-            self.trendnet.append(MLP([self.T, 32, self.T], activations='relu').to(DEVICE))
+            trend_model = MLP([self.T, 32, self.T], activations='relu').to(DEVICE)
+            self.trendnet.append(trend_model)
 
         self.reset_parameters()
 
@@ -134,7 +135,6 @@ class GateMaskNN(nn.Module):
             self.batch_size * batch_idx : self.batch_size * (batch_idx + 1)
         ]
         noise = th.randn(x.shape, device=DEVICE)
-        print(f"is the network in training mode? {self.training}")
         mask = mu + self.sigma * noise.normal_() * self.training
         mask = self.refactor_mask(mask, x.to(DEVICE))
 
