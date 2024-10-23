@@ -166,12 +166,13 @@ class GateMaskNN(nn.Module):
     def trend_info(self, x):
         if self.use_win:
             trend = self.moving_avg(x)
+            print("we use the window!")
         else:
             trend = x.to(DEVICE)
         trend_out = th.zeros(trend.shape,
                              dtype=trend.dtype, device=DEVICE)
         for i in range(self.channels):
-            trend_out[:, :, i] = self.trendnet[i](trend[:, :, i]).to(DEVICE)
+            trend_out[:, :, i] = self.trendnet[i](trend[:, :, i].to(DEVICE)).to(DEVICE)
 
         return trend_out
 
