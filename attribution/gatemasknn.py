@@ -166,7 +166,7 @@ class GateMaskNN(nn.Module):
         if self.use_win:
             trend = self.moving_avg(x)
         else:
-            trend = x
+            trend = x.to(DEVICE)
         trend_out = th.zeros(trend.shape,
                              dtype=trend.dtype, device=DEVICE)
         for i in range(self.channels):
@@ -176,7 +176,7 @@ class GateMaskNN(nn.Module):
 
     def refactor_mask(self, mask, x):
         trend = self.trend_info(x)
-        mask = mask + self.based
+        mask = mask.to(DEVICE) + self.based
 
         if self.pooling_method == 'sigmoid':
             mask = mask * th.sigmoid(
