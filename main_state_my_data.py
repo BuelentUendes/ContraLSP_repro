@@ -76,12 +76,12 @@ def main(
     all_splits = [k for k in kf.split(observations)]
 
     for fold, (train_idx, test_idx) in enumerate(all_splits):
-        x_train = observations[train_idx]
-        y_train = y[train_idx]
+        x_train = observations[train_idx].to(DEVICE)
+        y_train = y[train_idx].to(DEVICE)
 
-        x_test = observations[test_idx]
-        y_test = y[test_idx]
-        true_saliency = important_features[test_idx]
+        x_test = observations[test_idx].to(DEVICE)
+        y_test = y[test_idx].to(DEVICE)
+        true_saliency = important_features[test_idx].to(DEVICE)
 
         dataset_train = TimeSeriesDataset(x_train, y_train)
         dataset_test = TimeSeriesDataset(x_test, y_test)
