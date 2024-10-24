@@ -4,7 +4,7 @@ import torch.nn as nn
 from torchmetrics import Accuracy, Precision, Recall, AUROC
 from typing import Callable, Union
 
-from tint.models import Net
+from hmm.net_my_version import Net
 
 
 class StateClassifier(nn.Module):
