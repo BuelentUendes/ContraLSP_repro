@@ -58,6 +58,8 @@ def main(
     lambda_1: float = 1.0,
     lambda_2: float = 1.0,
     output_file: str = "results.csv",
+    iterations: int = 500,
+    epochs: int = 50,
 ):
     seed_everything(seed)
     # If deterministic, seed everything
@@ -66,7 +68,6 @@ def main(
 
     # Get accelerator and device
     accelerator = device.split(":")[0]
-    print(accelerator)
     device_id = 1
     if len(device.split(":")) > 1:
         device_id = [int(device.split(":")[1])]
@@ -108,7 +109,7 @@ def main(
 
         # Train classifier
         trainer = Trainer(
-            max_epochs=50,
+            max_epochs=epochs,
             accelerator=accelerator,
             devices=device_id,
             deterministic=deterministic,
@@ -224,18 +225,6 @@ def main(
                 lr=0.01,
             )
 
-            perturbation_model = nn.Sequential(
-                    RNN(
-                        input_size=x_test.shape[-1],
-                        rnn="gru",
-                        hidden_size=x_test.shape[-1],
-                        bidirectional=True,
-                    ),
-                    MLP([2 * x_test.shape[-1], x_test.shape[-1]]),
-                )
-
-            print(perturbation_model)
-
             explainer = ExtremalMask(classifier)
             _attr = explainer.attribute(
                 x_test,
@@ -248,7 +237,7 @@ def main(
 
         if "gate_mask" in explainers:
             trainer = Trainer(
-                max_epochs=args.iterations,
+                max_epochs=iterations, # 500 normally
                 accelerator=accelerator,
                 devices=device_id,
                 log_every_n_steps=2,
@@ -487,6 +476,7 @@ def parse_args():
     parser.add_argument("--signal_length", type=int, default=200, help="Length of the time_series")
     parser.add_argument("--sample_size", type=int, default=1_000, help="Number of timeseries to generate")
     parser.add_argument("--iterations", type=int, default=500)
+    parser.add_argument("--epochs", type=int, default=50)
 
     return parser.parse_args()
 
@@ -503,4 +493,6 @@ if __name__ == "__main__":
         lambda_1=args.lambda_1,
         lambda_2=args.lambda_2,
         output_file=args.output_file,
+        epochs=args.epochs,
+        iterations=args.iterations,
     )
