@@ -111,9 +111,9 @@ class GateMaskNN(nn.Module):
         self.mask = nn.Parameter(th.Tensor(*input_size).to(DEVICE))
 
         self.trendnet = nn.ModuleList()
+
         for i in range(self.channels):
             trend_model = MLP([self.T, 32, self.T], activations='relu').to(DEVICE)
-            print(trend_model)
             trend_model.mlp.to(DEVICE)
             self.trendnet.append(trend_model)
 
@@ -303,7 +303,6 @@ class GateMaskNet(Net):
         else:
             main_loss = -1. * self.loss(y_hat2, y_target1)
 
-        print(f"THE DISTORTION LOSS IS {main_loss}")
         loss = main_loss + mask_loss + triplet_loss
 
         _test_mask = self.net.representation(x.to(DEVICE))
