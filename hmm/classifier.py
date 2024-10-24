@@ -46,7 +46,7 @@ class StateClassifier(nn.Module):
             nn.Linear(self.hidden_size, self.n_state),
         )
 
-    def forward(self, x, return_all: bool = False):
+    def forward(self, x, return_all: bool = True): # I changed return_all !
         if self.rnn_type == "GRU":
             all_encodings, encoding = self.rnn(x)
         else:
@@ -59,7 +59,7 @@ class StateClassifier(nn.Module):
                 )
                 return self.regressor(reshaped_encodings).reshape(
                     all_encodings.shape[0], all_encodings.shape[1], -1
-                )
+                ).permute(0, 2, 1)
             return self.regressor(encoding.reshape(encoding.shape[1], -1))
         return encoding.reshape(encoding.shape[1], -1)
 
@@ -112,16 +112,21 @@ class StateClassifierNet(Net):
         return self.net(*args, **kwargs)
 
     def step(self, batch, batch_idx, stage):
+        #ToDo: WHAT THE FUCK IS THIS?
+        # WTF IS THIS?
         t = th.randint(batch[1].shape[-1], (1,)).item()
         x, y = batch
-        x = x[:, : t + 1]
-        y = y[:, t]
+        # Random batch
+        # x = x[:, : t + 1]
+        # y = y[:, t]
         y_hat = self(x)
+
         loss = self.loss(y_hat, y)
 
-        for metric in ["acc", "pre", "rec", "auroc"]:
-            getattr(self, stage + "_" + metric)(y_hat[:, 1], y.long())
-            self.log(stage + "_" + metric, getattr(self, stage + "_" + metric), prog_bar=True)
+        # for metric in ["acc", "pre", "rec", "auroc"]:
+        #     # getattr(self, stage + "_" + metric)(y_hat[:, 1], y.long())
+        #     getattr(self, stage + "_" + metric)(y_hat.permute(0, 2, 1), y.long()) # NEW LINE
+        #     self.log(stage + "_" + metric, getattr(self, stage + "_" + metric), prog_bar=True)
 
         return loss
 
