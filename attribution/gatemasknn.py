@@ -310,7 +310,11 @@ class GateMaskNet(Net):
         lambda_1_t = self.lambda_1
         lambda_2_t = self.lambda_2
         reg_t = reg.mean()
-        print(test, reg_t, triplet_loss, lambda_1_t, lambda_2_t, main_loss)
+        print(f"triplet loss {triplet_loss}")
+        print(f"l1 loss {mask_loss}")
+        print(f" distortion loss {main_loss}")
+
+        #print(test, reg_t, triplet_loss, lambda_1_t, lambda_2_t, main_loss)
 
         return loss
 
