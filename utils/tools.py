@@ -91,6 +91,9 @@ def print_results(mask_label, true_label):
     print(f"Saliency AUPRC: {metrics.auc(mask_rec, mask_prec)}")
     print(f"Saliency AUP: {metrics.auc(mask_thres, mask_prec[:-1])}")
     print(f"Saliency AUR: {metrics.auc(mask_thres, mask_rec[:-1])}")
+    print(f"Information: {metrics.information(mask_label, true_label):.4}")
+    print(f"Entropy: {metrics.entropy(mask_label, true_label):.4}")
+
     return metrics
 
 
@@ -110,7 +113,7 @@ def plot_example_box(input_arrays, cur_id=0, save_location=None, k=8):
     new_cmap = ListedColormap(cmap1)
 
     # sns.heatmap(data=input_array, cmap=color_map, cbar_kws={"label": "Mask"}, vmin=0, vmax=1)
-    ax.imshow(input_array, interpolation="nearest",cmap=new_cmap)#"gray" , norm=norm
+    ax.imshow(input_array, interpolation="nearest", cmap=new_cmap)#"gray" , norm=norm
     plt.gca().set_axis_off()
     plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
     # plt.figure(figsize=(12, 2))
