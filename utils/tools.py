@@ -14,6 +14,15 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('max_colwidth', 500)
 
+from tint.metrics.white_box import (
+    aup,
+    aur,
+    information,
+    entropy,
+    roc_auc,
+    auprc,
+)
+
 
 def process_results_by_file(CV, explainer_list, path='./results.csv'):
     pd.options.display.float_format = '{:.2f}'.format
@@ -91,8 +100,8 @@ def print_results(mask_label, true_label):
     print(f"Saliency AUPRC: {metrics.auc(mask_rec, mask_prec)}")
     print(f"Saliency AUP: {metrics.auc(mask_thres, mask_prec[:-1])}")
     print(f"Saliency AUR: {metrics.auc(mask_thres, mask_rec[:-1])}")
-    print(f"Information: {metrics.information(mask_label, true_label):.4}")
-    print(f"Entropy: {metrics.entropy(mask_label, true_label):.4}")
+    print(f"Information: {information(mask_label, true_label):.4}")
+    print(f"Entropy: {entropy(mask_label, true_label):.4}")
 
     return metrics
 
