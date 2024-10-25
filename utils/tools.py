@@ -100,8 +100,8 @@ def print_results(mask_label, true_label):
     print(f"Saliency AUPRC: {metrics.auc(mask_rec, mask_prec)}")
     print(f"Saliency AUP: {metrics.auc(mask_thres, mask_prec[:-1])}")
     print(f"Saliency AUR: {metrics.auc(mask_thres, mask_rec[:-1])}")
-    print(f"Information: {information(mask_label, true_label):.4}")
-    print(f"Entropy: {entropy(mask_label, true_label):.4}")
+    # print(f"Information: {information(mask_label, true_label):.4}")
+    # print(f"Entropy: {entropy(mask_label, true_label):.4}")
 
     return metrics
 
